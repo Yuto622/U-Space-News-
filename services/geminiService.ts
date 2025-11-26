@@ -1,52 +1,51 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { NewsCategory, GroundingSource } from "../types";
 
-const apiKey = process.env.API_KEY || '';
-
 // Initialize Gemini Client
-// Note: In a real production app, we would handle missing keys more gracefully or via a proxy.
-const ai = new GoogleGenAI({ apiKey });
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Fetches latest news for a specific category using Gemini 2.5 Flash and Google Search Grounding.
  */
 export const fetchSpaceNews = async (category: NewsCategory): Promise<{ text: string; sources: GroundingSource[] }> => {
-  if (!apiKey) {
-    throw new Error("API Key is missing.");
-  }
-
   const model = "gemini-2.5-flash";
   
   // Construct a prompt that asks for a news summary
   let topicQuery = "";
   switch (category) {
     case NewsCategory.ROCKETS:
-      topicQuery = "SpaceX, NASA, ロケット打ち上げ";
+      topicQuery = "SpaceX Starship, H3 Rocket, Falcon 9, 最新のロケット打ち上げスケジュールと結果";
       break;
     case NewsCategory.ASTRONOMY:
-      topicQuery = "最新の天文学的発見, ブラックホール, 銀河";
+      topicQuery = "ジェイムズ・ウェッブ宇宙望遠鏡, ブラックホール, ダークマター, 最新の天文学的発見";
       break;
     case NewsCategory.ISS:
-      topicQuery = "国際宇宙ステーション, 宇宙飛行士";
+      topicQuery = "国際宇宙ステーション, 日本人宇宙飛行士, アルテミス計画, 有人宇宙開発";
       break;
     case NewsCategory.MARS:
-      topicQuery = "火星探査, マーズローバー, テラフォーミング";
+      topicQuery = "火星探査車 パーサヴィアランス, マーズ・サンプル・リターン, 火星移住計画";
       break;
     default:
-      topicQuery = "宇宙開発, 宇宙ビジネス, 天文ニュース";
+      topicQuery = "宇宙ビジネス, 民間宇宙開発, スペースデブリ問題, 天文ショー";
   }
 
   const prompt = `
-    あなたは「U-Space」という未来的なニュースアプリの専属AIジャーナリストです。
-    以下のトピックに関する**最新かつ最も重要**なニュースを検索し、日本語で要約記事を作成してください。
+    Mission: Provide a futuristic intelligence report on the following space topic for the "U-Space" network users (Japanese audience).
+    Topic: ${topicQuery}
     
-    トピック: ${topicQuery}
+    Role: You are "COMET", the onboard AI of the U-Space orbital station.
     
-    要件:
-    1. 読者がワクワクするような、少し未来的で洗練された文体にしてください。
-    2. 3つの主要なニュースピックアップし、それぞれに見出しをつけてください。
-    3. 各ニュースの要点は簡潔にまとめてください。
-    4. 最後に「編集後記」として、あなたの短い感想を一言添えてください。
+    Directives:
+    1. Search for the **latest real-world news** (last 24-48 hours preferred).
+    2. Select the top 3 most impactful stories.
+    3. Output Format:
+       - **Headline**: Catchy, crisp Japanese headline (e.g., "【Starship】軌道投入試験、成功へ").
+       - **Body**: Concise summary of the event (2-3 sentences). Focus on facts and future implications.
+    4. Tone: Professional, slightly sci-fi/futuristic, but highly readable (Polite Japanese / Desu-Masu).
+    5. Ending: Add a brief "AI Analysis" or "Stardate Log" comment at the end.
+    
+    Output structured as a clean Markdown article.
   `;
 
   try {
@@ -59,14 +58,14 @@ export const fetchSpaceNews = async (category: NewsCategory): Promise<{ text: st
       },
     });
 
-    const text = response.text || "ニュースを取得できませんでした。";
+    const text = response.text || "通信妨害を検知。ニュースを取得できませんでした。";
     const sources = extractSources(response);
 
     return { text, sources };
 
   } catch (error) {
     console.error("Gemini API Error:", error);
-    throw new Error("ニュースの取得に失敗しました。しばらく経ってから再度お試しください。");
+    throw new Error("衛星リンクダウン。再接続を試みてください。");
   }
 };
 
@@ -74,25 +73,23 @@ export const fetchSpaceNews = async (category: NewsCategory): Promise<{ text: st
  * Handles chat interactions for specific space questions using Search Grounding.
  */
 export const sendChatMessage = async (message: string): Promise<{ text: string; sources: GroundingSource[] }> => {
-  if (!apiKey) return { text: "API Key not configured.", sources: [] };
-
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: message,
       config: {
         tools: [{ googleSearch: {} }],
-        systemInstruction: "あなたはU-SpaceのナビゲーターAIです。宇宙に関する質問に対して、最新情報を検索しながら、知的かつフレンドリーに答えてください。専門用語はわかりやすく解説してください。",
+        systemInstruction: "あなたはU-SpaceステーションのAIアシスタント「COMET」です。ユーザー（クルー）の質問に対し、Google検索で最新情報を確認しながら回答してください。口調は知的で冷静、少し未来的な表現（「了解」「データ照合中」など）を交えつつ、親切な日本語で話してください。",
       },
     });
 
     return {
-      text: response.text || "申し訳ありません。回答を生成できませんでした。",
+      text: response.text || "データ解析不能。申し訳ありません。",
       sources: extractSources(response),
     };
   } catch (error) {
     console.error("Chat Error:", error);
-    return { text: "エラーが発生しました。", sources: [] };
+    return { text: "システムエラー発生。", sources: [] };
   }
 };
 
@@ -107,7 +104,7 @@ const extractSources = (response: GenerateContentResponse): GroundingSource[] =>
     chunks.forEach((chunk) => {
       if (chunk.web) {
         sources.push({
-          title: chunk.web.title || "Web Source",
+          title: chunk.web.title || "Unknown Signal",
           uri: chunk.web.uri,
         });
       }
